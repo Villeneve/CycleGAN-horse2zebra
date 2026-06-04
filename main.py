@@ -311,7 +311,7 @@ for epoch in epochGraph:
 
         optG[0].zero_grad()
         optG[1].zero_grad()
-        lossG = 5*(identA+identB) + 10*(cycleA+cycleB) + AdvLoss
+        lossG = 1*(identA+identB) + 10*(cycleA+cycleB) + AdvLoss
         lossG.backward()
         optG[0].step()
         optG[1].step()
