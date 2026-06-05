@@ -57,6 +57,7 @@ class ResBatchConv2D(nn.Module):
 class ResConv2D(nn.Module):
     def __init__(self, inCh, outCh, depth_wise=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.inCh,self.outCh = inCh, outCh
         if depth_wise:
             self.residual = nn.Sequential(
                 nn.Conv2d(inCh,outCh,3,1,1),
@@ -82,6 +83,17 @@ class ResConv2D(nn.Module):
         skip = self.skip(x)
         residual = self.residual(x)
         return skip + self.gamma*residual
+    
+    def spectral_norm(self):
+        self.residual = nn.Sequential(
+                nn.utils.spectral_norm(nn.Conv2d(self.inCh,self.outCh,3,1,1)),
+                nn.LeakyReLU(),
+                nn.utils.spectral_norm(nn.Conv2d(self.outCh,self.outCh,3,1,1)),
+            )
+        if isinstance(self.skip,nn.Conv2d):
+            self.skip = nn.utils.spectral_norm(nn.Conv2d(self.inCh,self.outCh,1,1,0))
+        return self
+        
     
 class NoiseInject2D(nn.Module):
     def __init__(self, inCh, *args, **kwargs):
