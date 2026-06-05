@@ -105,10 +105,12 @@ class Generator(nn.Module):
         return self.autoencoder(x)
     
     def features(self, x:torch.Tensor):
-        feat1 = self.encoder[:1](x)
-        feat2 = self.encoder[1:3](feat1)
-        feat3 = self.encoder[3:5](feat2)
-        return [feat1,feat2,feat3]
+        feats = []
+        for i,layer in enumerate(self.encoder):
+            x = layer(x)
+            if i in [1,3,5]:
+                feats.append(x)
+        return feats
     
     def encoder_forward(self,x):
         return self.encoder(x)
@@ -123,25 +125,17 @@ class Critic(nn.Module):
             # 128x128
             ResConv2D(3,32,depth_wise=False).spectral_norm(),
             ResConv2D(32,32,depth_wise=False).spectral_norm(),
-            nn.Conv2d(32,32,2,2,1),
+            nn.utils.spectral_norm(nn.Conv2d(32,32,4,2,1)),
             # 64x64
             ResConv2D(32,64,depth_wise=False).spectral_norm(),
             ResConv2D(64,64,depth_wise=False).spectral_norm(),
-            nn.Conv2d(64,64,2,2,1),
+            nn.utils.spectral_norm(nn.Conv2d(64,64,4,2,1)),
             # 32x32
             ResConv2D(64,128,depth_wise=False).spectral_norm(),
             ResConv2D(128,128,depth_wise=False).spectral_norm(),
-            nn.Conv2d(128,128,2,2,1),
+            nn.utils.spectral_norm(nn.Conv2d(128,128,4,2,1)),
             # 16x16
-            ResConv2D(128,256,depth_wise=False).spectral_norm(),
-            ResConv2D(256,256,depth_wise=False).spectral_norm(),
-            nn.Conv2d(256,256,2,2,1),
-            # 8x8
-            ResConv2D(256,256,False).spectral_norm(),
-            ResConv2D(256,256,False).spectral_norm(),
-            nn.Conv2d(256,256,2,2,1),
-            # 4x4
-            nn.Conv2d(256,1,1,1,0)
+            nn.utils.spectral_norm(nn.Conv2d(128,1,1,1,0))
         )
 
     def forward(self, x: torch.Tensor):

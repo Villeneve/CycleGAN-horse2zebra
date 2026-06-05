@@ -2,12 +2,13 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from torch.nn.functional import normalize
 from torchvision import transforms as tt
 from torchinfo import summary
 
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm.notebook import tqdm
+from tqdm.autonotebook import tqdm
 import os
 from PIL import Image
 import random
@@ -19,9 +20,9 @@ from src.utils import *
 
 #%% Hiperparâmetros
 img_size = 128
-batch_size = 32
-lr = 2e-4
-beta1 = .5
+batch_size = 25
+lr = 1e-4
+beta1 = 0.
 beta2 = .99
 
 nce_temperature = .07
@@ -51,26 +52,58 @@ optG = torch.optim.Adam(gen.parameters(),lr,betas=(beta1,beta2))
 optC = torch.optim.Adam(crit.parameters(),lr,betas=(beta1,beta2))
 
 #%%
-batchGraph = tqdm()
-for horses,zebras in loader:
+# epochGraph = tqdm(range(10),position=0)
+for epoch in range(10):
+    batchGraph = tqdm(loader,position=0)
+    for horses,zebras in batchGraph:
+        batchGraph.set_description(f'Epoch: {epoch}')
+        horses,zebras = horses.to(device),zebras.to(device)
 
-    horses,zebras = horses.to(device),zebras.to(device)
+        # Forward Crítico
+        fakeZebras = gen(horses).detach()
+        trueLogits = crit(zebras)
+        fakeLogits = crit(fakeZebras)
+        AdvCritLoss = 0.5*((trueLogits-1).square().mean() + fakeLogits.square().mean())
+        optC.zero_grad()
+        AdvCritLoss.backward()
+        optC.step()
 
-    # Forward Crítico
-    fakeZebras = gen(horses).detach()
-    trueLogits = crit(zebras)
-    fakeLogits = crit(fakeZebras)
-    AdvCritLoss = (trueLogits-1).square().mean() + fakeLogits.square().mean()
-    optC.zero_grad()
-    AdvCritLoss.backward()
-    optC.step()
+        # Forward Gerador
+        optG.zero_grad()
+        featLoss = 0
+        fakeZebras = gen(horses)
+        for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
+            featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
+        featLoss.backward()
+        idtZebras = gen(zebras)
+        idtLoss = (zebras-idtZebras).abs().mean()
+        idtLoss.backward()
+        fakeZebras = gen(horses)
+        fakeLogits = crit(fakeZebras)
+        AdvGenLoss = (fakeLogits-1).square().mean()
+        AdvGenLoss.backward()
 
-    # Forward Gerador
-    fakeZebras = gen(horses)
-    fakeLogits = crit(fakeZebras)
-    AdvGenLoss = (fakeLogits-1).square().mean()
-    optG.zero_grad()
-    AdvGenLoss.backward()
-    optG.step()
+        lossG = idtLoss+AdvGenLoss+featLoss
+        # lossG.backward()
+        optG.step()
 
+        # Plot Loss
+        dictLoss = {
+            'featLoss':f'{featLoss.item():.4f}',
+            'idtLoss':f'{idtLoss.item():.4f}',
+            'AdvGenLoss':f'{AdvGenLoss.item():.4f}',
+            'AdvCritLoss':f'{AdvCritLoss.item():.4f}'
+        }
+        batchGraph.set_postfix(dictLoss)
 
+    # epochGraph.set_postfix(dictLoss)
+
+#%%
+with torch.inference_mode():
+    horse,_ = next(iter(loader))
+    horse = horse[0:1].to(device)
+    fakeZebra = gen(horse)
+    fakeZebra = fakeZebra[0].permute(1,2,0).cpu().numpy()*127.5+127.5
+    fakeZebra = fakeZebra.astype(np.uint8)
+    plt.imshow(fakeZebra)
+    plt.show()
