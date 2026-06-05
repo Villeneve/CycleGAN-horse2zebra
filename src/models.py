@@ -84,12 +84,12 @@ class Generator(nn.Module):
             # 32x32
             nn.UpsamplingBilinear2d(scale_factor=2),
             # 64x64
-            NoiseInject2D(256),
+            # NoiseInject2D(256),
             nn.Conv2d(256,128,3,1,1),
             nn.LeakyReLU(),
             nn.UpsamplingBilinear2d(scale_factor=2),
             # 128x128
-            NoiseInject2D(128),
+            # NoiseInject2D(128),
             nn.Conv2d(128,64,3,1,1),
             nn.LeakyReLU(),
             nn.Conv2d(64,3,7,1,3,padding_mode='reflect'),
@@ -104,6 +104,12 @@ class Generator(nn.Module):
     def forward(self, x:torch.Tensor):
         return self.autoencoder(x)
     
+    def features(self, x:torch.Tensor):
+        feat1 = self.encoder[:1](x)
+        feat2 = self.encoder[1:3](feat1)
+        feat3 = self.encoder[3:5](feat2)
+        return [feat1,feat2,feat3]
+    
     def encoder_forward(self,x):
         return self.encoder(x)
     
@@ -117,23 +123,23 @@ class Critic(nn.Module):
             # 128x128
             ResConv2D(3,32,depth_wise=False).spectral_norm(),
             ResConv2D(32,32,depth_wise=False).spectral_norm(),
-            nn.AvgPool2d(2,2),
+            nn.Conv2d(32,32,2,2,1),
             # 64x64
             ResConv2D(32,64,depth_wise=False).spectral_norm(),
             ResConv2D(64,64,depth_wise=False).spectral_norm(),
-            nn.AvgPool2d(2,2),
+            nn.Conv2d(64,64,2,2,1),
             # 32x32
             ResConv2D(64,128,depth_wise=False).spectral_norm(),
             ResConv2D(128,128,depth_wise=False).spectral_norm(),
-            nn.AvgPool2d(2,2),
+            nn.Conv2d(128,128,2,2,1),
             # 16x16
             ResConv2D(128,256,depth_wise=False).spectral_norm(),
             ResConv2D(256,256,depth_wise=False).spectral_norm(),
-            nn.AvgPool2d(2,2),
+            nn.Conv2d(256,256,2,2,1),
             # 8x8
             ResConv2D(256,256,False).spectral_norm(),
             ResConv2D(256,256,False).spectral_norm(),
-            nn.AvgPool2d(2,2),
+            nn.Conv2d(256,256,2,2,1),
             # 4x4
             nn.Conv2d(256,1,1,1,0)
         )

@@ -3,7 +3,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as tt
-from src.utils import FolderLoad
 from torchinfo import summary
 
 import numpy as np
@@ -13,6 +12,7 @@ import os
 from PIL import Image
 import random
 
+from src.utils import *
 from src.layers import *
 from src.models import *
 from src.utils import *
