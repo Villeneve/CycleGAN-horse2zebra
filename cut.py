@@ -20,14 +20,14 @@ from src.utils import *
 
 #%% Hiperparâmetros
 img_size = 128
-batch_size = 25
+batch_size = 100
 lr = 1e-4
 beta1 = 0.
 beta2 = .99
 
 nce_temperature = .07
 
-device = torch.device('cuda:0')
+device = torch.device('cuda:1')
 
 #%%
 transform = tt.Compose([
@@ -53,13 +53,14 @@ optC = torch.optim.Adam(crit.parameters(),lr,betas=(beta1,beta2))
 
 #%%
 # epochGraph = tqdm(range(10),position=0)
-for epoch in range(10):
+for epoch in range(1000):
     batchGraph = tqdm(loader,position=0)
     for horses,zebras in batchGraph:
         batchGraph.set_description(f'Epoch: {epoch}')
         horses,zebras = horses.to(device),zebras.to(device)
 
         # Forward Crítico
+        setGrads(crit,True)
         fakeZebras = gen(horses).detach()
         trueLogits = crit(zebras)
         fakeLogits = crit(fakeZebras)
@@ -69,11 +70,13 @@ for epoch in range(10):
         optC.step()
 
         # Forward Gerador
+        setGrads(crit,False)
         optG.zero_grad()
         featLoss = 0
         fakeZebras = gen(horses)
         for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
-            featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
+            # featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
+            featLoss += patch_nce_loss(fakeFeat,trueFeat)/3
         featLoss.backward()
         idtZebras = gen(zebras)
         idtLoss = (zebras-idtZebras).abs().mean()
@@ -95,7 +98,7 @@ for epoch in range(10):
             'AdvCritLoss':f'{AdvCritLoss.item():.4f}'
         }
         batchGraph.set_postfix(dictLoss)
-
+    plotResult(gen,loader)
     # epochGraph.set_postfix(dictLoss)
 
 #%%
@@ -106,4 +109,5 @@ with torch.inference_mode():
     fakeZebra = fakeZebra[0].permute(1,2,0).cpu().numpy()*127.5+127.5
     fakeZebra = fakeZebra.astype(np.uint8)
     plt.imshow(fakeZebra)
+    plt.axis(False)
     plt.show()
