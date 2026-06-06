@@ -20,8 +20,8 @@ from src.utils import *
 
 #%% Hiperparâmetros
 img_size = 128
-batch_size = 100
-lr = 1e-4
+batch_size = 32
+lr = 2e-4
 beta1 = 0.
 beta2 = .99
 
@@ -76,18 +76,18 @@ for epoch in range(1000):
         fakeZebras = gen(horses)
         for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
             # featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
-            featLoss += patch_nce_loss(fakeFeat,trueFeat)/3
-        featLoss.backward()
+            featLoss += patch_nce_loss(fakeFeat,trueFeat)
+        # featLoss.backward()
         idtZebras = gen(zebras)
         idtLoss = (zebras-idtZebras).abs().mean()
-        idtLoss.backward()
-        fakeZebras = gen(horses)
+        # idtLoss.backward()
+        # fakeZebras = gen(horses)
         fakeLogits = crit(fakeZebras)
         AdvGenLoss = (fakeLogits-1).square().mean()
-        AdvGenLoss.backward()
+        # AdvGenLoss.backward()
 
-        lossG = idtLoss+AdvGenLoss+featLoss
-        # lossG.backward()
+        lossG = .5*idtLoss+AdvGenLoss+.2*featLoss
+        lossG.backward()
         optG.step()
 
         # Plot Loss

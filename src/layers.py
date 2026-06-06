@@ -20,7 +20,7 @@ class ResBatchConv2D(nn.Module):
         return skip + self.gamma*residual
     
 class ResConv2D(nn.Module):
-    def __init__(self, inCh, outCh, depth_wise=True, *args, **kwargs):
+    def __init__(self, inCh, outCh, depth_wise=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inCh,self.outCh = inCh, outCh
         if depth_wise:
@@ -33,21 +33,25 @@ class ResConv2D(nn.Module):
             )
         else:
             self.residual = nn.Sequential(
-                nn.Conv2d(inCh,outCh,3,1,1),
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(inCh,outCh,3,1,0),
+                nn.InstanceNorm2d(outCh),
                 nn.LeakyReLU(),
-                nn.Conv2d(outCh,outCh,3,1,1),
+                nn.ReflectionPad2d(1),
+                nn.Conv2d(outCh,outCh,3,1,0),
+                nn.InstanceNorm2d(outCh),
             )
         for layer in self.residual:
             if isinstance(layer,nn.Conv2d):
                 nn.init.kaiming_normal_(layer.weight,0.01)
                 nn.init.zeros_(layer.bias)
         self.skip = nn.Identity() if inCh == outCh else nn.Conv2d(inCh,outCh,1,1,0)
-        self.gamma = nn.Parameter(torch.ones(1,outCh,1,1)*.2)
+        # self.gamma = nn.Parameter(torch.ones(1,outCh,1,1)*.2)
     
     def forward(self, x: torch.Tensor):
         skip = self.skip(x)
         residual = self.residual(x)
-        return skip + self.gamma*residual
+        return skip + residual
     
     def spectral_norm(self):
         self.residual = nn.Sequential(

@@ -66,12 +66,17 @@ class Generator(nn.Module):
         self.encoder = nn.Sequential(
             # 128x128
             nn.Conv2d(3,64,7,1,3,padding_mode='reflect'),
+            nn.InstanceNorm2d(64),
             nn.LeakyReLU(),
 
-            nn.Conv2d(64,128,3,2,1),
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(64,128,4,2,0),
+            nn.InstanceNorm2d(128),
             nn.LeakyReLU(),
             # 64x64
-            nn.Conv2d(128,256,3,2,1),
+            nn.ReflectionPad2d(1),
+            nn.Conv2d(128,256,4,2,0),
+            nn.InstanceNorm2d(256),
             nn.LeakyReLU(),
             # 32x32
         )
@@ -82,16 +87,14 @@ class Generator(nn.Module):
         )
         self.decoder = nn.Sequential(
             # 32x32
-            nn.UpsamplingBilinear2d(scale_factor=2),
+            nn.ConvTranspose2d(256,128,4,2,1),
+            nn.InstanceNorm2d(128),
+            nn.LeakyReLU(),
             # 64x64
-            # NoiseInject2D(256),
-            nn.Conv2d(256,128,3,1,1),
+            nn.ConvTranspose2d(128,64,4,2,1),
+            nn.InstanceNorm2d(64),
             nn.LeakyReLU(),
-            nn.UpsamplingBilinear2d(scale_factor=2),
             # 128x128
-            # NoiseInject2D(128),
-            nn.Conv2d(128,64,3,1,1),
-            nn.LeakyReLU(),
             nn.Conv2d(64,3,7,1,3,padding_mode='reflect'),
             nn.Tanh()
         )
@@ -108,7 +111,7 @@ class Generator(nn.Module):
         feats = []
         for i,layer in enumerate(self.encoder):
             x = layer(x)
-            if i in [1,3,5]:
+            if i in [2,6,10]:
                 feats.append(x)
         return feats
     
@@ -119,24 +122,29 @@ class Generator(nn.Module):
         return self.decoder(x)
     
 class Critic(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.features = nn.Sequential(
-            # 128x128
-            ResConv2D(3,32,depth_wise=False).spectral_norm(),
-            ResConv2D(32,32,depth_wise=False).spectral_norm(),
-            nn.utils.spectral_norm(nn.Conv2d(32,32,4,2,1)),
-            # 64x64
-            ResConv2D(32,64,depth_wise=False).spectral_norm(),
-            ResConv2D(64,64,depth_wise=False).spectral_norm(),
-            nn.utils.spectral_norm(nn.Conv2d(64,64,4,2,1)),
-            # 32x32
-            ResConv2D(64,128,depth_wise=False).spectral_norm(),
-            ResConv2D(128,128,depth_wise=False).spectral_norm(),
-            nn.utils.spectral_norm(nn.Conv2d(128,128,4,2,1)),
-            # 16x16
-            nn.utils.spectral_norm(nn.Conv2d(128,1,1,1,0))
+    def __init__(self, in_ch=3, base_ch=64):
+        super().__init__()
+
+        def snconv(in_c, out_c, k=4, s=2, p=1):
+            return nn.utils.spectral_norm(
+                nn.Conv2d(in_c, out_c, kernel_size=k, stride=s, padding=p)
+            )
+
+        self.model = nn.Sequential(
+            snconv(in_ch, base_ch, 4, 2, 1),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            snconv(base_ch, base_ch * 2, 4, 2, 1),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            snconv(base_ch * 2, base_ch * 4, 4, 2, 1),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            snconv(base_ch * 4, base_ch * 8, 4, 1, 1),
+            nn.LeakyReLU(0.2, inplace=True),
+
+            snconv(base_ch * 8, 1, 4, 1, 1),
         )
 
-    def forward(self, x: torch.Tensor):
-        return self.features(x)
+    def forward(self, x):
+        return self.model(x)
