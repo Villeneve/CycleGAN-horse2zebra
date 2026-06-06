@@ -20,7 +20,7 @@ from src.utils import *
 
 #%% Hiperparâmetros
 img_size = 128
-batch_size = 32
+batch_size = 8
 lr = 2e-4
 beta1 = .5
 beta2 = .999
@@ -51,6 +51,8 @@ summary(gen,(batch_size,3,img_size,img_size),verbose=1)
 summary(crit,(batch_size,3,img_size,img_size),verbose=1)
 optG = torch.optim.Adam(gen.parameters(),lr,betas=(beta1,beta2))
 optC = torch.optim.Adam(crit.parameters(),lr,betas=(beta1,beta2))
+scheduler_G = torch.optim.lr_scheduler.LambdaLR(optG, lr_lambda=lr_lambda)
+scheduler_C = torch.optim.lr_scheduler.LambdaLR(optC, lr_lambda=lr_lambda)
 
 #%%
 # epochGraph = tqdm(range(10),position=0)
@@ -62,7 +64,8 @@ for epoch in range(1000):
 
         # Forward Crítico
         setGrads(crit,True)
-        fakeZebras = gen(horses).detach()
+        with torch.no_grad():
+            fakeZebras = gen(horses)
         trueLogits = crit(zebras)
         fakeLogits = crit(fakeZebras)
         AdvCritLoss = 0.5*((trueLogits-1).square().mean() + fakeLogits.square().mean())
@@ -77,7 +80,7 @@ for epoch in range(1000):
         fakeZebras = gen(horses)
         for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
             # featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
-            featLoss += patch_nce_loss(fakeFeat,trueFeat)/3
+            featLoss += patch_nce_loss(fakeFeat,trueFeat)/4
         # featLoss.backward()
         idtZebras = gen(zebras)
         idtLoss = (zebras-idtZebras).abs().mean()
@@ -100,6 +103,8 @@ for epoch in range(1000):
         }
         batchGraph.set_postfix(dictLoss)
     plotResult(gen,loader)
+    scheduler_G.step()
+    scheduler_C.step()
     # epochGraph.set_postfix(dictLoss)
 
 #%%

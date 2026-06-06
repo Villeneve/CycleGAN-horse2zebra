@@ -84,10 +84,12 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(256,128,4,2,1),
             nn.InstanceNorm2d(128),
             nn.ReLU(inplace=True),
+            ConvBlock(128,128,3,1,1),
             # 64x64
             nn.ConvTranspose2d(128,64,4,2,1),
             nn.InstanceNorm2d(64),
             nn.ReLU(inplace=True),
+            ConvBlock(64,64,3,1,1),
             # 128x128
             nn.Conv2d(64,3,7,1,3,padding_mode='reflect'),
             nn.Tanh()
@@ -109,7 +111,7 @@ class Generator(nn.Module):
         return self.autoencoder(x)
     
     def features(self, x:torch.Tensor):
-        feats = []
+        feats = [x]
         for i,layer in enumerate(self.encoder):
             x = layer(x)
             if i in [1,3,5]:

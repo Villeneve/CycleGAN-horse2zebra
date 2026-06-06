@@ -139,3 +139,11 @@ def patch_nce_loss(
     loss = F.cross_entropy(logits, labels)
 
     return loss
+
+def lr_lambda(epoch: int) -> float:
+    # epoch é a época atual (começa em 0)
+    # retorna um MULTIPLICADOR, não o LR diretamente
+    if epoch < 100:
+        return 1.0                        # LR = 2e-4 × 1.0 = 2e-4 (sem mudança)
+    else:
+        return 1.0 - (epoch - 100) / 900 # decai linearmente até 0 ao fim de 1000 épocas
