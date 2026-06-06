@@ -82,10 +82,12 @@ class Generator(nn.Module):
         self.decoder = nn.Sequential(
             # 32x32
             nn.ConvTranspose2d(256,128,4,2,1),
-            nn.LeakyReLU(),
+            nn.InstanceNorm2d(128),
+            nn.ReLU(inplace=True),
             # 64x64
             nn.ConvTranspose2d(128,64,4,2,1),
-            nn.LeakyReLU(),
+            nn.InstanceNorm2d(64),
+            nn.ReLU(inplace=True),
             # 128x128
             nn.Conv2d(64,3,7,1,3,padding_mode='reflect'),
             nn.Tanh()

@@ -76,8 +76,8 @@ for epoch in range(1000):
         featLoss = 0
         fakeZebras = gen(horses)
         for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
-            featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
-            # featLoss += patch_nce_loss(fakeFeat,trueFeat)
+            # featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
+            featLoss += patch_nce_loss(fakeFeat,trueFeat)/3
         # featLoss.backward()
         idtZebras = gen(zebras)
         idtLoss = (zebras-idtZebras).abs().mean()

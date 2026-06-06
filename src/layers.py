@@ -3,14 +3,15 @@ import torch
 
 class ConvBlock(nn.Module):
     def __init__(self, inCh, outCh, kernel=3, stride=1, padding=0,**kwargs):
-        super().__init__(**kwargs)
-        self.cnn = nn.Conv2d(inCh,outCh,kernel,stride,padding,**kwargs)
-        self.lrelu = nn.LeakyReLU(inplace=True)
-        nn.init.kaiming_normal_(self.cnn.weight,.01)
-        nn.init.zeros_(self.cnn.bias)
-        
+        super().__init__()
+        self.cnn = nn.Sequential(
+            nn.Conv2d(inCh,outCh,kernel,stride,padding,**kwargs),
+            nn.InstanceNorm2d(outCh),
+            nn.ReLU(inplace=True)
+        )
+
     def forward(self,x):
-        return self.lrelu(self.cnn(x))
+        return self.cnn(x)
     
 class ResConv2D(nn.Module):
     def __init__(self, inCh, outCh, *args, **kwargs):
@@ -23,9 +24,8 @@ class ResConv2D(nn.Module):
             ConvBlock(inCh,outCh,3,1,0),
             nn.ReflectionPad2d(1),
             nn.Conv2d(outCh,outCh,3,1,0),
+            nn.InstanceNorm2d(outCh),
         )
-        nn.init.xavier_normal_(self.residual[-1].weight)
-        nn.init.zeros_(self.residual[-1].bias)
         
         if inCh == outCh:
             self.skip = nn.Identity() 
