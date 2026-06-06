@@ -61,43 +61,42 @@ class UnetSum(nn.Module):
         return
 
 class Generator(nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self):
+        super().__init__()
         self.encoder = nn.Sequential(
             # 128x128
-            nn.Conv2d(3,64,7,1,3,padding_mode='reflect'),
-            nn.InstanceNorm2d(64),
-            nn.LeakyReLU(),
-
             nn.ReflectionPad2d(1),
-            nn.Conv2d(64,128,4,2,0),
-            nn.InstanceNorm2d(128),
-            nn.LeakyReLU(),
+            ConvBlock(3,64,3,1,0),
+            nn.ReflectionPad2d(1),
+            ConvBlock(64,128,4,2,0),
             # 64x64
             nn.ReflectionPad2d(1),
-            nn.Conv2d(128,256,4,2,0),
-            nn.InstanceNorm2d(256),
-            nn.LeakyReLU(),
+            ConvBlock(128,256,4,2,0),
             # 32x32
         )
         self.latent = nn.Sequential(
             # 32x32
-            *[ResConv2D(256,256,depth_wise=False) for i in range(6)],
+            *[ResConv2D(256,256) for i in range(6)],
             # 32x32
         )
         self.decoder = nn.Sequential(
             # 32x32
             nn.ConvTranspose2d(256,128,4,2,1),
-            nn.InstanceNorm2d(128),
             nn.LeakyReLU(),
             # 64x64
             nn.ConvTranspose2d(128,64,4,2,1),
-            nn.InstanceNorm2d(64),
             nn.LeakyReLU(),
             # 128x128
             nn.Conv2d(64,3,7,1,3,padding_mode='reflect'),
             nn.Tanh()
         )
+        for layer in self.decoder:
+            if isinstance(layer,nn.ConvTranspose2d):
+                nn.init.kaiming_normal_(layer.weight,.01)
+                nn.init.zeros_(layer.bias)
+        nn.init.xavier_normal_(self.decoder[-2].weight)
+        nn.init.zeros_(self.decoder[-2].bias)
+
         self.autoencoder = nn.Sequential(
             self.encoder,
             self.latent,
@@ -111,7 +110,7 @@ class Generator(nn.Module):
         feats = []
         for i,layer in enumerate(self.encoder):
             x = layer(x)
-            if i in [2,6,10]:
+            if i in [1,3,5]:
                 feats.append(x)
         return feats
     
@@ -131,19 +130,19 @@ class Critic(nn.Module):
             )
 
         self.model = nn.Sequential(
-            # 128x128
+            # 256x256
             snconv(in_ch, base_ch, 4, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
 
-            # 64x64
+            # 128x128
             snconv(base_ch, base_ch * 2, 4, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
 
-            # 32x32
+            # 64x64
             snconv(base_ch * 2, base_ch * 4, 4, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
-            
-            # 16x16
+
+            # 32x32
             snconv(base_ch * 4, base_ch * 8, 4, 1, 1),
             nn.LeakyReLU(0.2, inplace=True),
 

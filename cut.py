@@ -22,8 +22,8 @@ from src.utils import *
 img_size = 128
 batch_size = 32
 lr = 2e-4
-beta1 = 0.
-beta2 = .99
+beta1 = .5
+beta2 = .999
 
 nce_temperature = .07
 
@@ -31,8 +31,8 @@ device = torch.device('cuda:1')
 
 #%%
 transform = tt.Compose([
-    tt.Resize(144,tt.InterpolationMode.BICUBIC),
-    tt.RandomCrop((128,128)),
+    tt.Resize(img_size+16,tt.InterpolationMode.BILINEAR),
+    tt.RandomCrop((img_size,img_size)),
     tt.RandomHorizontalFlip(.5),
     tt.ToTensor(),
     tt.Normalize((.5,.5,.5),(.5,.5,.5)),
@@ -47,8 +47,8 @@ loader = DataLoader(
 #%%
 gen = Generator().to(device)
 crit = Critic().to(device)
-summary(gen,(32,3,128,128),verbose=1)
-summary(crit,(32,3,128,128),verbose=1)
+summary(gen,(batch_size,3,img_size,img_size),verbose=1)
+summary(crit,(batch_size,3,img_size,img_size),verbose=1)
 optG = torch.optim.Adam(gen.parameters(),lr,betas=(beta1,beta2))
 optC = torch.optim.Adam(crit.parameters(),lr,betas=(beta1,beta2))
 
@@ -76,8 +76,8 @@ for epoch in range(1000):
         featLoss = 0
         fakeZebras = gen(horses)
         for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
-            # featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
-            featLoss += patch_nce_loss(fakeFeat,trueFeat)
+            featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
+            # featLoss += patch_nce_loss(fakeFeat,trueFeat)
         # featLoss.backward()
         idtZebras = gen(zebras)
         idtLoss = (zebras-idtZebras).abs().mean()
@@ -87,7 +87,7 @@ for epoch in range(1000):
         AdvGenLoss = (fakeLogits-1).square().mean()
         # AdvGenLoss.backward()
 
-        lossG = .5*idtLoss+AdvGenLoss+1/3*featLoss
+        lossG = .1*idtLoss+AdvGenLoss+featLoss
         lossG.backward()
         optG.step()
 
