@@ -31,8 +31,9 @@ device = torch.device('cuda:1')
 
 #%%
 transform = tt.Compose([
-    tt.Resize(128),
-    tt.CenterCrop((128,128)),
+    tt.Resize(144,tt.InterpolationMode.BICUBIC),
+    tt.RandomCrop((128,128)),
+    tt.RandomHorizontalFlip(.5),
     tt.ToTensor(),
     tt.Normalize((.5,.5,.5),(.5,.5,.5)),
 ])
@@ -86,7 +87,7 @@ for epoch in range(1000):
         AdvGenLoss = (fakeLogits-1).square().mean()
         # AdvGenLoss.backward()
 
-        lossG = .5*idtLoss+AdvGenLoss+.2*featLoss
+        lossG = .5*idtLoss+AdvGenLoss+1/3*featLoss
         lossG.backward()
         optG.step()
 

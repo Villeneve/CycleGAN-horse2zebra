@@ -131,15 +131,19 @@ class Critic(nn.Module):
             )
 
         self.model = nn.Sequential(
+            # 128x128
             snconv(in_ch, base_ch, 4, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
 
+            # 64x64
             snconv(base_ch, base_ch * 2, 4, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
 
+            # 32x32
             snconv(base_ch * 2, base_ch * 4, 4, 2, 1),
             nn.LeakyReLU(0.2, inplace=True),
-
+            
+            # 16x16
             snconv(base_ch * 4, base_ch * 8, 4, 1, 1),
             nn.LeakyReLU(0.2, inplace=True),
 

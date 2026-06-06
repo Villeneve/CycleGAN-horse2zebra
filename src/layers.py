@@ -37,6 +37,7 @@ class ResConv2D(nn.Module):
                 nn.Conv2d(inCh,outCh,3,1,0),
                 nn.InstanceNorm2d(outCh),
                 nn.LeakyReLU(),
+                
                 nn.ReflectionPad2d(1),
                 nn.Conv2d(outCh,outCh,3,1,0),
                 nn.InstanceNorm2d(outCh),
