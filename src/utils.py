@@ -61,84 +61,34 @@ import torch.nn.functional as F
 def patch_nce_loss(
     feat_q: torch.Tensor,
     feat_k: torch.Tensor,
-    num_patches: int = 256,
     temperature: float = 0.07,
     detach_key: bool = True,
 ):
-    """
-    Calcula PatchNCE entre dois mapas de features.
-
-    feat_q: mapa query, geralmente features de fake_B
-            shape: (B, C, H, W)
-
-    feat_k: mapa key, geralmente features de real_A
-            shape: (B, C, H, W)
-
-    Retorna:
-        loss escalar
-    """
-
-    if feat_q.shape != feat_k.shape:
-        raise ValueError(f"feat_q e feat_k devem ter o mesmo shape. "
-                         f"Recebido {feat_q.shape} e {feat_k.shape}")
-
-    B, C, H, W = feat_q.shape
-    N = H * W
-
-    # (B, C, H, W) -> (B, H*W, C)
-    feat_q = feat_q.permute(0, 2, 3, 1).reshape(B, N, C)
-    feat_k = feat_k.permute(0, 2, 3, 1).reshape(B, N, C)
-
-    # Amostra patches correspondentes
-    if num_patches is not None and num_patches < N:
-        patch_ids = torch.randperm(N, device=feat_q.device)[:num_patches]
-        feat_q = feat_q[:, patch_ids, :]
-        feat_k = feat_k[:, patch_ids, :]
-
     if detach_key:
         feat_k = feat_k.detach()
 
-    # Normaliza no eixo dos canais
-    feat_q = F.normalize(feat_q, dim=2, eps=1e-8)
-    feat_k = F.normalize(feat_k, dim=2, eps=1e-8)
+    B, S, C = feat_q.shape
 
-    # Depois da amostragem
-    S = feat_q.shape[1]
-
-    # Positivo: q_i com k_i
-    # shape: (B, S, 1)
     l_pos = torch.bmm(
-        feat_q.view(B * S, 1, C),
-        feat_k.view(B * S, C, 1)
-    ).view(B, S, 1)
+        feat_q.reshape(B * S, 1, C),
+        feat_k.reshape(B * S, C, 1)
+    ).reshape(B, S, 1)
 
-    # Negativos: q_i com todos os k_j da mesma imagem
-    # shape: (B, S, S)
     l_neg = torch.bmm(
         feat_q,
         feat_k.transpose(1, 2)
     )
 
-    # Remove o positivo da matriz de negativos
     diagonal = torch.eye(S, device=feat_q.device, dtype=torch.bool)[None, :, :]
     l_neg = l_neg.masked_fill(diagonal, -10.0)
 
-    # Logits finais: positivo na coluna 0, negativos depois
-    # shape: (B, S, 1 + S)
     logits = torch.cat([l_pos, l_neg], dim=2)
-
-    # Temperatura
     logits = logits / temperature
+    logits = logits.reshape(B * S, 1 + S)
 
-    # Cada patch deve escolher a coluna 0, que é o positivo
     labels = torch.zeros(B * S, dtype=torch.long, device=feat_q.device)
 
-    # Cross entropy espera (N, classes)
-    logits = logits.view(B * S, 1 + S)
-
-    loss = F.cross_entropy(logits, labels)
-
-    return loss
+    return F.cross_entropy(logits, labels)
 
 def lr_lambda(epoch: int) -> float:
     # epoch é a época atual (começa em 0)
@@ -147,3 +97,33 @@ def lr_lambda(epoch: int) -> float:
         return 1.0                        # LR = 2e-4 × 1.0 = 2e-4 (sem mudança)
     else:
         return 1.0 - (epoch - 100) / 900 # decai linearmente até 0 ao fim de 1000 épocas
+    
+def multilayer_patch_nce_loss(
+    feats_q,
+    feats_k,
+    netF,
+    num_patches=256,
+    temperature=0.07,
+):
+    feats_q, patch_ids = netF(
+        feats_q,
+        patch_ids=None,
+        num_patches=num_patches
+    )
+
+    feats_k, _ = netF(
+        feats_k,
+        patch_ids=patch_ids,
+        num_patches=num_patches
+    )
+
+    total_loss = 0.0
+
+    for feat_q, feat_k in zip(feats_q, feats_k):
+        total_loss = total_loss + patch_nce_loss(
+            feat_q,
+            feat_k,
+            temperature=temperature
+        )
+
+    return total_loss / len(feats_q)

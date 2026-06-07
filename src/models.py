@@ -110,12 +110,19 @@ class Generator(nn.Module):
     def forward(self, x:torch.Tensor):
         return self.autoencoder(x)
     
-    def features(self, x:torch.Tensor):
-        feats = [x]
-        for i,layer in enumerate(self.encoder):
+    def features(self, x: torch.Tensor):
+        feats = []
+
+        for i, layer in enumerate(self.encoder):
             x = layer(x)
-            if i in [1,3,5]:
+            if i in [1, 3, 5]:
                 feats.append(x)
+
+        for i, layer in enumerate(self.latent):
+            x = layer(x)
+            if i in [1, 3, 5]:
+                feats.append(x)
+
         return feats
     
     def encoder_forward(self,x):
@@ -129,7 +136,7 @@ class Critic(nn.Module):
         super().__init__()
 
         def snconv(in_c, out_c, k=4, s=2, p=1):
-            return nn.utils.spectral_norm(
+            return (
                 nn.Conv2d(in_c, out_c, kernel_size=k, stride=s, padding=p)
             )
 
@@ -155,3 +162,39 @@ class Critic(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+    
+class PatchProjector(nn.Module):
+    def __init__(self, channels, proj_dim=256):
+        super().__init__()
+
+        self.mlps = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(c, proj_dim),
+                nn.ReLU(inplace=True),
+                nn.Linear(proj_dim, proj_dim)
+            )
+            for c in channels
+        ])
+
+    def forward(self, feats, patch_ids=None, num_patches=256):
+        projected_feats = []
+        sampled_ids = []
+
+        for i, feat in enumerate(feats):
+            B, C, H, W = feat.shape
+            feat = feat.permute(0, 2, 3, 1).reshape(B, H * W, C)
+
+            if patch_ids is None:
+                ids = torch.randperm(H * W, device=feat.device)
+                ids = ids[:min(num_patches, H * W)]
+            else:
+                ids = patch_ids[i]
+
+            feat = feat[:, ids, :]
+            feat = self.mlps[i](feat)
+            feat = nn.functional.normalize(feat, dim=2, eps=1e-8)
+
+            projected_feats.append(feat)
+            sampled_ids.append(ids)
+
+        return projected_feats, sampled_ids

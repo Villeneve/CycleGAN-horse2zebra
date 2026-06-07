@@ -47,17 +47,31 @@ loader = DataLoader(
 #%%
 gen = Generator().to(device)
 crit = Critic().to(device)
-summary(gen,(batch_size,3,img_size,img_size),verbose=1)
-summary(crit,(batch_size,3,img_size,img_size),verbose=1)
-optG = torch.optim.Adam(gen.parameters(),lr,betas=(beta1,beta2))
-optC = torch.optim.Adam(crit.parameters(),lr,betas=(beta1,beta2))
+netF = PatchProjector([64, 128, 256, 256, 256, 256], proj_dim=256).to(device)
+
+summary(gen, (batch_size, 3, img_size, img_size), verbose=1)
+summary(crit, (batch_size, 3, img_size, img_size), verbose=1)
+
+optG = torch.optim.Adam(
+    list(gen.parameters()) + list(netF.parameters()),
+    lr,
+    betas=(beta1, beta2)
+)
+
+optC = torch.optim.Adam(
+    crit.parameters(),
+    lr,
+    betas=(beta1, beta2)
+)
+
 scheduler_G = torch.optim.lr_scheduler.LambdaLR(optG, lr_lambda=lr_lambda)
 scheduler_C = torch.optim.lr_scheduler.LambdaLR(optC, lr_lambda=lr_lambda)
 
 #%%
 # epochGraph = tqdm(range(10),position=0)
-for epoch in range(1000):
+for epoch in range(1000+1):
     batchGraph = tqdm(loader,position=0)
+    if epoch%10 == 0: torch.save(gen.state_dict(),'./weights/genCut.pth')
     for horses,zebras in batchGraph:
         batchGraph.set_description(f'Epoch: {epoch}')
         horses,zebras = horses.to(device),zebras.to(device)
@@ -74,37 +88,47 @@ for epoch in range(1000):
         optC.step()
 
         # Forward Gerador
-        setGrads(crit,False)
+        setGrads(crit, False)
         optG.zero_grad()
-        featLoss = 0
-        fakeZebras = gen(horses)
-        for trueFeat,fakeFeat in zip(gen.features(horses),gen.features(fakeZebras)):
-            # featLoss += (normalize(trueFeat.detach(),dim=1,eps=1e-8)-normalize(fakeFeat,dim=1,eps=1e-8)).abs().mean()/3
-            featLoss += patch_nce_loss(fakeFeat,trueFeat)/4
-        # featLoss.backward()
-        idtZebras = gen(zebras)
-        idtLoss = (zebras-idtZebras).abs().mean()
-        # idtLoss.backward()
-        # fakeZebras = gen(horses)
-        fakeLogits = crit(fakeZebras)
-        AdvGenLoss = (fakeLogits-1).square().mean()
-        # AdvGenLoss.backward()
 
-        lossG = .1*idtLoss+AdvGenLoss+featLoss
+        fakeZebras = gen(horses)
+
+        fakeLogits = crit(fakeZebras)
+        AdvGenLoss = (fakeLogits - 1).square().mean()
+
+        featLoss_X = multilayer_patch_nce_loss(
+            gen.features(fakeZebras),
+            gen.features(horses),
+            netF,
+            num_patches=256,
+            temperature=nce_temperature
+        )
+
+        idtZebras = gen(zebras)
+
+        featLoss_Y = multilayer_patch_nce_loss(
+            gen.features(idtZebras),
+            gen.features(zebras),
+            netF,
+            num_patches=256,
+            temperature=nce_temperature
+        )
+
+        lossG = AdvGenLoss + featLoss_X + featLoss_Y
         lossG.backward()
         optG.step()
 
         # Plot Loss
         dictLoss = {
-            'featLoss':f'{featLoss.item():.4f}',
-            'idtLoss':f'{idtLoss.item():.4f}',
-            'AdvGenLoss':f'{AdvGenLoss.item():.4f}',
-            'AdvCritLoss':f'{AdvCritLoss.item():.4f}'
+            'featLoss_X': f'{featLoss_X.item():.4f}',
+            'featLoss_Y': f'{featLoss_Y.item():.4f}',
+            'AdvGenLoss': f'{AdvGenLoss.item():.4f}',
+            'AdvCritLoss': f'{AdvCritLoss.item():.4f}'
         }
         batchGraph.set_postfix(dictLoss)
     plotResult(gen,loader)
-    scheduler_G.step()
-    scheduler_C.step()
+    # scheduler_G.step()
+    # scheduler_C.step()
     # epochGraph.set_postfix(dictLoss)
 
 #%%
